@@ -1,7 +1,7 @@
 ---
 title: "Pre-course material - HARMONY - Grant Period 5 - Larissa, Greece Training School 22 - 24 April 2024"
 author:
-- Eleftherios Meletis, Xanthi Rousou, Matthew Denwood, Polychronis Kostoulas, 
+- Eleftherios Meletis, Xanthi Rousou, Matthew Denwood, Polychronis Kostoulas
 date: "`r Sys.Date()`"
 output:
   html_document:
