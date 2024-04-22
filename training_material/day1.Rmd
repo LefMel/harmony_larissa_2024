@@ -1,0 +1,236 @@
+---
+title: "Introduction to Bayesian Disease Measurement for Health Scientists - Day 1"
+author:
+- Eleftherios Meletis
+- Polychronis Kostoulas
+date: '2024-04-22'
+output:
+  slidy_presentation: default
+  beamer_presentation: default
+  ioslides_presentation: default
+params:
+  presentation: yes
+subtitle: CA18208 HARMONY Larissa Training School 2024 - https://harmony-net.eu/
+---
+
+```{r rendering, eval=FALSE, include=FALSE}
+# To render this as PDF (beamer) slides run:
+rmarkdown::render('day1.Rmd', 'beamer_presentation', params=list(presentation=TRUE))
+```
+
+```{r setup, include=FALSE}
+library("tidyverse")
+library("runjags")
+library("rjags")
+runjags.options(silent.jags=TRUE, silent.runjags=TRUE)
+set.seed(2024-04-22)
+
+# Reduce the width of R code output for PDF only:
+if(params$presentation){
+  knitr::knit_hooks$set(size = function(before, options, envir) {
+    if(before){
+      knitr::asis_output(paste0("\\", options$size))
+    }else{
+      knitr::asis_output("\\normalsize")
+    }
+  })
+  knitr::opts_chunk$set(size = "scriptsize")
+}
+
+# Collapse successive chunks:
+space_collapse <- function(x){ gsub("```\n*```r*\n*", "", x) }
+# Reduce space between chunks:
+space_reduce <- function(x){ gsub("```\n+```\n", "", x) }
+knitr::knit_hooks$set(document = space_collapse)
+
+
+# To collect temporary filenames:
+cleanup <- character(0)
+```
+
+# Bayesian Statistics
+
+In this session we'll see how we can estimate a probability of interest  but in a Bayesian framework, i.e. using Bayes theorem.
+
+Bayes' theorem  - P(A|B) = P(B|A)*P(A)/P(B)
+ 
+Components
+
+ * P(A|B): Prob of event A occurring given that B is true - Posterior probability
+ * P(B|A): Prob of event B occurring given that A is true - Likelihood ~ function of A
+ * P(A): Prob of event A occurring - Prior probability
+ * P(B): Prob of event B occurring - Marginal probability ~ sum over all possible values of A
+
+# What we usually see/use
+
+* theta: parameter of interest | y: observed data}
+* P(theta|y) = P(y|theta) * P(theta)/P(y) 
+
+Where:
+
+ * P(theta): Prior probability of parameter(s) of interest;
+ * P(y|theta): Likelihood of the data given the parameters value(s) 
+ * P(theta|y): Posterior probability of parameter(s) of interest given the data and the prior
+
+
+# Bayesian Inference - Summary & Example
+
+To estimate the posterior distribution P(theta|y) we need to:
+
+ *  Specify the Prior distribution: P(theta)
+ *  Define the Likelihood of the data: P(y|theta) 
+
+ 
+# Example 1
+
+Hemophilia is a disease that exhibits X-chromosome-linked recessive inheritance. Consider a woman who has an affected brother, which implies that her mother must be a carrier of the hemophilia gene. We are also told that her father is not affected. Suppose she has two sons, neither of whom is affected.
+
+* The unknown quantity of interest is the state of the woman.
+
+# Exercise 1: Bayesian apparent prevalence (ap) estimation
+
+y out of n individuals test positive. Estimate the apparent prevalence in a Bayesian framework.
+
+ * Parameter of interest: ap - [0,1]
+
+ * Data: n tested, y positive
+
+ * Prior distribution for ap: ap ~ Beta(a,b)
+ * Likelihood: y ~ Binomial(n,ap) 
+
+# Let's write our first JAGS model
+
+```{r}
+ap_model <- 
+  'model {
+  
+  # Define likelihood distribution of the data
+  # JAGS Binomial distribution Arguments: p, n 
+  
+  y ~ dbin(ap,n)
+  
+  # Specify prior distribution for par of interest 
+  # Uniform (non-informative) prior distribution 
+  ap ~ dbeta(1, 1)
+
+  #data# n, y
+  #monitor# ap
+  #inits# ap
+  }
+  '
+```
+
+# Let's run our first JAGS model
+```{r}
+# Call JAGS
+library(runjags)
+
+# Provide Data 
+n = 40
+y = 12
+```
+
+#
+```{r}
+# Initial values for par of interest
+
+ap <- list(chain1=0.05, chain2=0.95)
+
+
+# Run the model
+results <- run.jags(ap_model, n.chains=2, 
+                    burnin=5000, sample=10000)
+
+# View results
+
+# Plot results
+plot(results)
+# Print results
+summary(results)
+```
+
+# Exercise 1 - Practical
+
+  * What if you tested 4000 individuals (n=4000) and 1200 tested positive (y=1200)?
+  * What if you have prior information on ap?
+
+# Exercise 2: Bayesian true prevalence (tp) estimation
+
+Assuming the absence of a perfect test we do not know how many individuals are truly positive/negative.
+
+Instead we know that n individuals are tested with an imperfect test and y have a positive result.
+
+
+ * Apparent/True prevalence: ap/tp 
+ * Sensitivity: Se 
+ * Specificity: Sp
+
+ * ap = P(T+) = P(T + & D+) + P(T+ &  D-) = P(D+) * P(T+|D+) + P(D-) * P(T+|D-) =>
+ * ap = tp * Se + (1 - tp) * (1 - Sp)
+
+# Create a JAGS model for true prevalence estimation
+
+ * Parameters of interest - tp, Se, Sp 
+
+Prior distributions
+
+ * tp ~ dbeta(1,1) # Uniform (non-informative) prior distribution 
+ * Se ~ dbeta(25.4, 3.4) # 0.85 (0.7 - 0.95)
+ * Sp ~ dbeta(95, 5) # 0.77 (0.49 - 0.96)
+
+  Data: n tested, y positive
+
+  * Likelihood: y ~ Binomial(n,ap), 
+  * ap = tp * Se + (1 - tp) * (1 - Sp)
+
+# Write JAGS model
+```{r}
+tp_model <- 
+  'model {
+  y ~ dbin(ap,n)
+  ap <- tp*Se + (1-tp)*(1-Sp)
+  
+  # Uniform (non-informative) prior distribution 
+  tp ~ dbeta(1,1)
+  # Informative priors for Se and Sp
+  Se ~ dbeta(25.4, 3.4)
+  Sp ~ dbeta(95, 5)
+  
+  #data# n, y
+  #monitor# tp, Se, Sp
+  #inits# tp, Se, Sp
+  }
+  '
+```
+
+# Let's run our JAGS model
+```{r}
+# Call JAGS
+library(runjags)
+# Provide Data 
+n = 4072
+y = 1210
+# Initial values for pars of interest
+tp <- list(chain1=0.05, chain2=0.95)
+Se <- list(chain1=0.05, chain2=0.95)
+Sp <- list(chain1=0.05, chain2=0.95)
+
+# Run the model
+results <- run.jags(tp_model, n.chains=2, 
+                    burnin=5000, sample=10000)
+## View results
+# Plot results
+plot(results) # Click backwards to view all plots
+# Print results
+summary(results)
+```
+
+
+# Exercise 2 - Practical
+
+  * What if you had no prior information at all on Se,Sp?
+  * What if the sample size is n=40, y=12?
+
+
+
+# Ok for today? - Any questions?
